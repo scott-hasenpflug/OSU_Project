@@ -353,3 +353,8 @@ df$full_name[duplicated(df$full_name)]
         # Add those to dataframe, but how to handle them? Impacts analysis
         # Need names for organization codes
         # Turn this into a function
+
+unique(df$rank_name)
+df %>%
+        count(rank_name) %>%
+        view()
