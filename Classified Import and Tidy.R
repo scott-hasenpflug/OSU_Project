@@ -1,4 +1,13 @@
-# Load necessary packages
+#############################################################
+## Classified Employee data wrangling and tidying
+## Scott Hasenpflug
+## hasenpflug7@gmail.com
+## 06MAR2022
+#############################################################
+
+##############################
+# 0 - Load librairies
+##############################
 library(tidyverse)
 library(pdftools)
 library(rebus)
@@ -7,38 +16,59 @@ library(tidytext)
 library(skimr)
 library(scales)
 library(knitr)
-#
 
-# Import the file
-classified_file <- pdf_text("classified_output.pdf")
-# raw_import is a character vector of 150 strings, each representing one page of
-        # the report
+############################## 
+# 1 - Source files 
+##############################
+data_path <- "C:/Users/hasen/Desktop/R_WD/OSU Project/" 
+data_file <- "classified_output.pdf" 
 
-# Split the strings by the dashed line that separates each employee
-classified_pages_listed <- classified_file %>%
+##############################
+# 2 - Import
+##############################
+
+input_data <- pdf_text(paste0(data_path, data_file))
+
+##############################
+# 3 - Tidy
+##############################
+
+# input_data is a character vector, each representing one page of the report
+
+# Split the strings to separate each employee
+pages_listed <- input_data %>%
         str_split("---------------------------------------------------------------------------------")
-# pages_listed is a list of 235 character vectors 5 to 7 strings long (header 
-        # plus 4-6 employees)
 
-# Loop over each vector in classified_pages_listed, deleting the first element which is always the header
-for (i in 1:235) {
-        classified_pages_listed[[i]] <- classified_pages_listed[[i]][-1]
+# Check first vector
+pages_listed[[1]]
+
+# Loop over each vector in pages_listed, deleting the first element which is always the header
+for (i in 1:length(pages_listed)) {
+        pages_listed[[i]] <- pages_listed[[i]][-1]
 }
-# classified_pages_listed is now a list of 1050 character vectors 4 to 6 strings long
 
-# Some people have multiple jobs. For now I want only employees with 1 job. Unlist classified_pages_listed
-classified_pages_unlisted <- unlist(classified_pages_listed)
-# pages_unlisted is a character vector with 5958 strings representing each employee
+# Check first vector to ensure success
+pages_listed[[1]]
 
-# Single job employees' strings are always under 415 in length. Create logical vectors by length:
-short <- str_length(classified_pages_unlisted) < 415
-long <- str_length(classified_pages_unlisted) >= 415
+# Some people have multiple jobs. For now I want only employees with 1 job. Un-list ages_listed
+pages_unlisted <- unlist(pages_listed)
+# pages_unlisted is a character vector with with each string representing one employee
+
+# I only want employees with one job for now. An easy way to tell is string length:
+sort(str_length(pages_unlisted), decreasing = TRUE)
+
+# Manually find the length cutoff between one and multiple jobs. Here, it was ~ 415
+cutoff <- 415
+ 
+# Single job employees' strings are always under (cutoff) in length. Create logical vectors by length:
+short <- str_length(pages_unlisted) < cutoff
+long <- str_length(pages_unlisted) >= cutoff
 
 # Subset single and multiple job employees using those logical vectors
-single <- classified_pages_unlisted[short] # 1403 employees 
-multiple <- classified_pages_unlisted[long] # 4 employees
+single <- pages_unlisted[short]
+multiple <- pages_unlisted[long]
 
-# Re-list both vectors
+# Re-list both character vectors by number of jobs
 one_job <- list(single)
 multiple_jobs <- list(multiple)
 
@@ -55,7 +85,7 @@ multiple_jobs <- list(multiple)
         colnames(df) <- Variable_Names
 
 # Loop over every vector in list one_job, extracting each variable, putting them into a 
-        # vector, and binding it to the bottom of the dataframe
+# vector, and binding it to the bottom of the dataframe
 for (i in 1:length(one_job[[1]])) {
         name <- str_match(one_job[[1]][i], pattern = "Name: " %R% capture(lazy(zero_or_more(char_class(WRD, NOT_WRD)))) %R% SPC %R% SPC)[,-1]
         first_hired <- str_match(one_job[[1]][i], pattern = "First Hired: " %R% capture(one_or_more(DGT) %R% "\\-" %R% one_or_more(WRD) %R% "\\-" %R% one_or_more(DGT)))[, -1]
@@ -66,7 +96,7 @@ for (i in 1:length(one_job[[1]])) {
         job_title <- str_trim(str_match(one_job[[1]][i], pattern = "Job Title: " %R% capture(one_or_more(char_class(WRD, SPACE, PUNCT))) %R% "Posn")[, -1])
         posn_suff <- str_match(one_job[[1]][i], pattern = "Posn-Suff: " %R% capture(lazy(zero_or_more(char_class(WRD, NOT_WRD)))) %R% SPC %R% SPC)[, -1]
         appt_percent <- str_match(one_job[[1]][i], pattern = "Appt Percent:" %R% zero_or_more(SPC) %R% capture(one_or_more(DGT)))[, -1]
-        months_length <- str_match(one_job[[1]][i], pattern = "Appt: Classified " %R% capture(one_or_more(DGT)))[, -1]
+        months_length <- str_trim(str_match(one_job[[1]][i], pattern = "Appt: Classified" %R% capture(zero_or_more(char_class(WRD, NOT_WRD))) %R% or("F", "H"))[-1])
         monthly_salary_rate <- str_match(one_job[[1]][i], pattern = "Full-Time Monthly Salary:" %R% one_or_more(SPC) %R% capture(one_or_more(DGT) %R% DOT %R% one_or_more(DGT)))[, -1]
         hourly_salary_rate <- str_match(one_job[[1]][i], pattern = "Hourly Rate:" %R% one_or_more(SPC) %R% capture(one_or_more(DGT) %R% DOT %R% one_or_more(DGT)))[, -1]
         
@@ -86,6 +116,12 @@ df <- df %>%
         separate(name, c("last_name", "first_name"), sep = ", ") %>%
         mutate(first_name = word(first_name))
 
+# Clean up months_length
+df <- df %>%
+        mutate(months_length = if_else(months_length != "-Intermittent (J)", months_length, "Intermittent")) %>%
+        mutate(months_length = if_else(months_length != "-Limited Duration (J", months_length, "Limited")) %>%               
+        mutate(months_length = if_else(months_length != "-Seasonal (J)", months_length, "Seasonal"))
+
 # Convert salaries from character to numeric
 df$monthly_salary_rate <- as.numeric(as.character(df$monthly_salary_rate))
 df$hourly_salary_rate <- as.numeric(as.character(df$hourly_salary_rate))
@@ -95,156 +131,57 @@ df <- df %>%
         mutate(first_hired = dmy(first_hired), 
                adj_service_date = dmy(adj_service_date))
 
-# Create home organization code variable (277 -> 106 may help)
+# Create home organization code variable
 df <- df %>%
         mutate(home_org_code = str_extract(home_orgn, pattern = START %R% WRD %R% WRD %R% WRD))
 
-# Create factor variable for short (9 mo) vs long (12 mo) contracts
-#df <- df %>%
-        #mutate(mo_label = recode_factor(months_length, `9` = "short", `10` = "ten", `12` = "long"))
-
-######################### Exploratory Analysis ################################
-
-# Look at the structure of our dataframe
-str(df)
-glimpse(df)
-view(df)
-
-# Generate some summary statistics
-skimr::skim(df)
-
-# Who is the highest paid?
-## Monthly
-df %>% filter(monthly_salary_rate == max(df$monthly_salary_rate, na.rm = TRUE)) %>%
-        select(first_name, last_name, monthly_salary_rate)
-## Hourly
-df %>% filter(hourly_salary_rate == max(df$hourly_salary_rate, na.rm = TRUE)) %>%
-        select(first_name, last_name, hourly_salary_rate)
-
-#!!! What's the most common title? 
-df %>%
-        count(job_title, sort = TRUE)
-        
-        # Graph of titles with more than 30 holders
-common_titles <- df %>%
-        count(job_title, sort = TRUE) %>%
-        filter(n > 30)
-
-ggplot(common_titles, aes(n, reorder(job_title, n))) +
-        geom_col() +
-        labs(title = "Most Common Titles", 
-             y = "Title", 
-             x = "Total") +
-        theme_minimal()
-
-# How many people are working outside their home organization?
-not_loaned <- sum(df$home_orgn == df$job_orgn)         
-loaned <- sum(df$home_orgn != df$job_orgn) 
-percent(loaned/(loaned + not_loaned))
-
-# Which home organization has the highest average salary?
-## Monthly
-df %>%
-        group_by(home_orgn) %>%
-        summarize(Min = min(monthly_salary_rate, na.rm = TRUE),
-                  Mean = mean(monthly_salary_rate, na.rm = TRUE),
-                  Median = median(monthly_salary_rate, na.rm = TRUE),
-                  Max = max(monthly_salary_rate, na.rm = TRUE),
-                  Employees = n()) %>%
-        ungroup() %>%
-        arrange(desc(Mean)) 
-## Hourly
-df %>%
-        group_by(home_orgn) %>%
-        summarize(Min = min(hourly_salary_rate, na.rm = TRUE),
-                  Mean = mean(hourly_salary_rate, na.rm = TRUE),
-                  Median = median(hourly_salary_rate, na.rm = TRUE),
-                  Max = max(hourly_salary_rate, na.rm = TRUE),
-                  Employees = n()) %>%
-        ungroup() %>%
-        arrange(desc(Mean))
-
-# What is the relationship between length of employment and salary?
-## Monthly
-df %>%
-        ggplot(aes(first_hired, monthly_salary_rate, na.rm = TRUE)) +
-                geom_point(alpha = .3) +
-                geom_smooth(method = lm, se = FALSE)
-## Hourly
-df %>%
-        ggplot(aes(first_hired, hourly_salary_rate, na.rm = TRUE)) +
-        geom_point(alpha = .3) +
-        geom_smooth(method = lm, se = FALSE)
-
-#-------------------end progress-----------------------------------------------
-
-# What is the median salary of a professor vs an instructor?
-median(df$annual_salary_rate[professor_rank], na.rm = TRUE)
-median(df$annual_salary_rate[instructor_rank], na.rm = TRUE)
-
-# What is the mean salary of "presidents" across different organisations?
-df %>%
-        mutate(Prez = president_title) %>%
-        filter(Prez == TRUE) %>%
-        group_by(home_orgn) %>%
-        summarize(Presidents = n(), Salary = mean(annual_salary_rate)) %>%
-        ungroup() %>%
-        arrange(desc(Salary)) %>%
-        mutate(Salary = dollar(Salary)) %>%
-        rename(Organization = home_orgn) %>%
-        rename("Average Salary" = Salary) %>%
-        kable()
-        
-        
-        # salary distribution of "directors"?
-df %>%
-        mutate(Direc = director_title) %>%
-        filter(Direc == TRUE) %>%
-        group_by(home_orgn) %>%
-        summarize(Directors = n(), Mean_Salary = mean(annual_salary_rate)) %>%
-        ungroup() %>%
-        arrange(desc(Mean_Salary)) %>% # how do I print this?
-        ggplot(aes(Mean_Salary)) +
-        geom_histogram(binwidth = 7500) +
-        labs(title = '"Director" Salary Distribution', x = "Mean Salary", y = "Count")
-
-## Let's look at these appointment titles
-        # Are they paid? No
-df$annual_salary_rate[courtesy_title]
-df$annual_salary_rate[emeritus_title]
-        # Create a logical vector combining these two
-appointment_title <- courtesy_title|emeritus_title
-
-## Tasks: 
+# Create hourly equivalent of salary to use in comparison (assume 120 hr month)
+df <- df %>%
+        mutate(monthly_salary_equivalent = hourly_salary_rate * 120)
 
 # Distribute Salary into bins
-df <- df %>%
-        mutate(salary_bin = case_when(
-                is.na(annual_salary_rate) ~ "Unpaid",
-                between(annual_salary_rate, 0, 45000) ~ "Very Low", 
-                between(annual_salary_rate, 45001, 58000) ~ "Low",
-                between(annual_salary_rate, 58001, 100000) ~ "Medium",
-                between(annual_salary_rate, 100001, 150000) ~ "High",
-                between(annual_salary_rate, 150001, 300000) ~ "Very High",
-                TRUE ~ "Top Tier")) %>%
-        mutate(salary_bin = factor(salary_bin, 
-                   levels = c("Unpaid", "Very Low", 
-                                "Low", "Medium", "High", 
-                                "Very High", "Top Tier")))
 
-#------------------start progress----------------------------
+# Monthly
+quantile(df$monthly_salary_rate, probs = seq(0, 1, 0.2), na.rm = TRUE)
+
+df <- df %>%
+        mutate(monthly_salary_bin = case_when(
+                is.na(monthly_salary_rate) ~ "NA",
+                between(monthly_salary_rate, 0, 3824.99) ~ "Very Low", 
+                between(monthly_salary_rate, 3825, 4197.99) ~ "Low",
+                between(monthly_salary_rate, 4198, 4834.99) ~ "Medium",
+                between(monthly_salary_rate, 4835, 6132.99) ~ "High",
+                between(monthly_salary_rate, 6133, 9604) ~ "Very High",
+                TRUE ~ "Other")) %>%
+        mutate(monthly_salary_bin = factor(monthly_salary_bin, 
+                                           levels = c("NA", "Very Low", 
+                                                      "Low", "Medium", "High", 
+                                                      "Very High", "Other")))
+
+# Hourly
+quantile(df$hourly_salary_rate, probs = seq(0, 1, 0.2), na.rm = TRUE)
+
+df <- df %>%
+        mutate(hourly_salary_bin = case_when(
+                is.na(hourly_salary_rate) ~ "NA",
+                between(hourly_salary_rate, 0, 16.30) ~ "Very Low", 
+                between(hourly_salary_rate, 16.31, 19.24) ~ "Low",
+                between(hourly_salary_rate, 19.25, 21.06) ~ "Medium",
+                between(hourly_salary_rate, 21.07, 24.22) ~ "High",
+                between(hourly_salary_rate, 24.23, 56.74) ~ "Very High",
+                TRUE ~ "Other")) %>%
+        mutate(hourly_salary_bin = factor(hourly_salary_bin, 
+                                          levels = c("NA", "Very Low", 
+                                                     "Low", "Medium", "High", 
+                                                     "Very High", "Other")))
 
 # Distribution of tenure into 5 yr bins
 
-skim(df$first_hired)
-skim(df$adj_service_date)
-
-# Calculate tenure as # of years since first hired (rounded down) ***This is janky. 
-# Figure it out better in lubridate***
+# Calculate tenure as # of years since first hired, rounded down
 df <- df %>%
         mutate(tenure = floor((as.numeric((today() - first_hired)/365))))
 
-# Create labels for the bins
+# Create labels for the 5 yr tenure bins
 tenure_bin_labels <- c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40+")
 
 # Create a column of the bin value based on tenure
@@ -261,56 +198,10 @@ df <- df %>%
                 TRUE ~ "40+")) %>%
         mutate(tenure_bin = factor(tenure_bin, levels = tenure_bin_labels))
 
-# Check how they are distributed
-table(df$tenure_bin)
+# Save the data frame as classified_df
+classified_df <- df
+save(classified_df, file = "classified_df.RData")
 
-# Quick plot
-ggplot(df, aes(tenure_bin)) +
-        geom_bar()
 
-# Plot by example organization
-# Which is the biggest?
-count(df, home_org_code, sort = TRUE)
 
-# Plot by MHD
-df %>%
-        filter(home_org_code == "MHD") %>%
-        ggplot(aes(tenure_bin)) +
-        geom_bar()
-
-# Compare the top two, HHS and CLA
-df %>%
-        filter(home_org_code %in% c("MHD", "TEX")) %>%
-        ggplot(aes(tenure_bin, fill = home_org_code)) +
-        geom_bar(position = "dodge")
-
-# Summary of tenure by home_org_code
-        # Create a table of the count per bin per code
-table(df$home_org_code, df$tenure_bin)
-
-        # Turn it into a tibble
-Tenure_Summary <- table(df$home_org_code, df$tenure_bin) %>%
-        as.data.frame() %>%
-        tibble() %>%
-        pivot_wider(names_from = "Var2", values_from ="Freq")
-
-        # Make a version with a percentage of total per bin per code
-Tenure_Summary_Prop <- Tenure_Summary %>%
-        mutate(total = (`0-4` + `5-9` + `10-14` + `15-19` + `20-24` + `25-29` + `30-34` + `35-39` + `40+`)) %>%
-        mutate(`0-4` = round(`0-4`/total, digits = 3),
-               `5-9` = round(`5-9`/total, digits = 3),
-               `10-14` = round(`10-14`/total, digits = 3),
-               `15-19` = round(`15-19`/total, digits = 3),
-               `20-24` = round(`20-24`/total, digits = 3),
-               `25-29` = round(`25-29`/total, digits = 3),
-               `30-34` = round(`30-34`/total, digits = 3),
-               `35-39` = round(`35-39`/total, digits = 3),
-               `40+` = round(`40+`/total, digits = 3)) %>%
-                .[,-11]
-
-# Check if there are any duplicate names
-df$full_name[duplicated(df$full_name)]
-        # Nope
-        
-############################## To-do ##########################################
 
