@@ -1,29 +1,3 @@
-# Load necessary packages
-library(tidyverse)
-library(pdftools)
-library(rebus)
-library(lubridate)
-library(tidytext)
-library(skimr)
-library(scales)
-library(knitr)
-
-# Load data frame
-load("unclassified_df.RData")
-df <- unclassified_df
-rm(unclassified_df)
-
-##############################
-# Exploratory Analysis
-##############################
-
-# Look at the structure of our dataframe
-str(df)
-glimpse(df)
-
-# Generate some summary statistics
-skimr::skim(df)
-
 # Who is the highest paid?
 df %>% filter(annual_salary_rate == max(df$annual_salary_rate, na.rm = TRUE)) %>%
         select(first_name, last_name, annual_salary_rate)
@@ -77,7 +51,7 @@ professor_rank <- str_detect(df$rank_name, pattern = "Professor")
 associate_rank <- str_detect(df$rank_name, pattern = "Associate")
 instructor_rank <- str_detect(df$rank_name, pattern = "Instructor")
 
-director_title <- str_detect(df$job_title, pattern = or("Director", "Dir-", "Dir."))
+
 manager_title <- str_detect(df$job_title, pattern = or("Manager", "Mgr"))
 president_title <- str_detect(df$job_title, pattern = or("President", "Pres.", "Pres-"))
 courtesy_title <- str_detect(df$job_title, pattern = "Courtesy Appointment")
@@ -86,6 +60,35 @@ emeritus_title <- str_detect(df$job_title, pattern = "Emeritus Appointment")
 #This will include the logical vector as a column in the df
 #df2 <- df %>%
         #mutate(emeritus = str_detect(df$job_title, pattern = "Emeritus Appointment"))
+
+# Check how tenures are distributed
+table(df$tenure_bin)
+
+# Make a table of tenure per bin by organization
+table(df$home_org_code, df$tenure_bin)
+
+#Quick plot of overall distribution
+ggplot(df, aes(tenure_bin)) +
+        geom_bar()
+
+# Examine individual organizations
+# Which is the biggest?
+count(df, home_org_code, sort = TRUE)
+
+# Plot by largest organization
+df %>%
+        filter(home_org_code == pull(count(df, home_org_code, sort = TRUE)[1, 1])) %>%
+        ggplot(aes(tenure_bin)) +
+        geom_bar()
+
+# Compare the top two
+df %>%
+        filter(home_org_code %in% pull(count(df, home_org_code, sort = TRUE)[1:2, 1])) %>%
+        ggplot(aes(tenure_bin, fill = home_org_code)) +
+        geom_bar(position = "dodge")
+
+# Check if there are any duplicate names
+df$full_name[duplicated(df$full_name)]
 
 # What is the median salary of a professor vs an instructor?
 median(df$annual_salary_rate[professor_rank], na.rm = TRUE)
@@ -213,9 +216,3 @@ unique(df$rank_name)
 df %>%
         count(rank_name) %>%
         view()
-
-############################## To-do ##########################################
-# Figure out extractions for multiple jobs. It'll use str_xxx_all 
-# Add those to dataframe, but how to handle them? Impacts analysis
-# Need names for organization codes
-# Turn this into a function

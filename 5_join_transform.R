@@ -1,0 +1,157 @@
+#*******************************************************************************
+# All OSU Join and Wrangle
+# Scott Hasenpflug
+# hasenpflug7@gmail.com
+# 13MAR2022
+#*******************************************************************************
+
+#*******************************************************************************
+# 0 - Load libraries
+#*******************************************************************************
+
+library(tidyverse)
+library(pdftools)
+library(rebus)
+library(lubridate)
+library(tidytext)
+library(skimr)
+library(scales)
+library(knitr)
+library(stringr)
+library(tibble)
+
+#*******************************************************************************
+# 1 - Source Data Frames 
+#*******************************************************************************
+
+load("faculty_df2.RData") 
+load("staff_df2.RData")
+
+#*******************************************************************************
+# 2 - Join and Wrangle
+#*******************************************************************************
+
+# Join combined data frame -----------------------------------------------------
+
+# Join staff and faculty
+osu_wth_appt <- full_join(staff, faculty)
+rm(staff, faculty)
+
+# Wrangle combined data frame --------------------------------------------------
+
+# Notice appt_end_date is a character variable. Fix
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(appt_end_date = dmy(appt_end_date))
+
+# I like the type variable. Let's put appointee as a 3rd type
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(type = case_when(
+                appointee == TRUE ~ "Appointee",
+                TRUE ~ as.character(type)))
+
+# I think a part-time/full-time logical variable would be useful
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(full_time = case_when(
+                appt_percent == 100 ~ TRUE,
+                TRUE ~ FALSE))
+
+# I think a "loaner" logical variable would be useful if an employee works 
+# outside of their home org
+
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(loaner = case_when(
+                job_org_code != home_org_code ~ TRUE,
+                TRUE ~ FALSE))
+
+# Rearrange the variables. First: Critical info. Followed by: Logical, Date, 
+#   Numeric, Factor, Character
+
+# Define variable categories
+cols_critical <- c("full_name", "type", "job_title", "salary_adj", 
+                   "tenure", "job_category", "loaner", "full_time", 
+                   "rank_admin", "rank_academic", "ID")
+cols_logical <- c("has_tenure", "appointee", "senior_designation")
+cols_date <- c("first_hired", "adj_service_date", "rank_effective_date", 
+          "appt_begin_date", "appt_end_date")
+cols_numeric <- c("annual_salary_rate", "monthly_salary_rate", 
+                  "hourly_salary_rate", "appt_percent", "posn_suff", 
+                  "monthly_salary_equivalent")
+cols_factor <- c("tenure_bin", "salary_bin")
+cols_character <- c("job_type", "first_name", "last_name", "home_org_code",
+                    "job_org_code", "home_orgn", "home_category",
+                    "job_orgn", "months_length", "rank_name")
+
+# Reorder
+osu_wth_appt <- osu_wth_appt %>%
+        relocate(cols_critical, cols_logical, cols_date, cols_numeric, 
+                 cols_factor, cols_character)
+
+# Remove variable categories
+rm(cols_critical, cols_logical, cols_date, cols_numeric, 
+   cols_factor, cols_character)
+
+# Make column names shorter and correct style
+osu_wth_appt <- osu_wth_appt %>%
+        rename(
+                name.full = full_name,
+                type.employee = type,
+                job.title= job_title,
+                pay.annual.adj = salary_adj,
+                tenure.yrs = tenure,
+                job.category = job_category,
+                loaner = loaner,
+                full.time = full_time,
+                rank.admin = rank_admin,
+                rank.acad= rank_academic,
+                id = ID,
+                tenure.log = has_tenure,
+                appointee = appointee,
+                senior = senior_designation,
+                first.hired = first_hired,
+                date.adj.serv = adj_service_date,
+                date.rank.eff = rank_effective_date,
+                date.appt.begin = appt_begin_date,
+                date.appt.end = appt_end_date,
+                pay.annual = annual_salary_rate,
+                pay.monthly= monthly_salary_rate,
+                pay.hourly = hourly_salary_rate,
+                percent.time = appt_percent,
+                posn.code = posn_suff,
+                pay.monthly.equiv = monthly_salary_equivalent,
+                bin.tenure = tenure_bin,
+                bin.pay = salary_bin,
+                job.type = job_type,
+                name.first = first_name,
+                name.last = last_name,
+                home.code = home_org_code,
+                job.code = job_org_code,
+                home.org = home_orgn,
+                home.category = home_category,
+                job.org = job_orgn,
+                contract.length= months_length,
+                rank.name = rank_name)
+
+# Fix one instance of "Emerita" job title causing incorrect appointee status
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(appointee = case_when(
+                id == "F-1785" ~ TRUE,
+                TRUE ~ appointee
+        ))
+# Ideas for further wrangling --------------------------------------------------
+
+# I consider deleting: "posn_suff", "monthly_salary_equivalent", and "rank_name"
+#   but will leave them for now
+
+#! Factorize/sort rank_admin? 
+
+#! WFT Ed Ray?
+
+# Split and save the data frames -----------------------------------------------
+
+# Primary data frame will eliminate appointees. Keep osu_wth_appt in case I 
+# need them later
+osu <- osu_wth_appt %>%
+        filter(appointee == F)
+
+save(osu, file = "osu_df.RData")
+save(osu_wth_appt, file = "osu_wth_appt_df.RData")
