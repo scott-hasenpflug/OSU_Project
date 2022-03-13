@@ -137,6 +137,12 @@ osu_wth_appt <- osu_wth_appt %>%
                 id == "F-1785" ~ TRUE,
                 TRUE ~ appointee
         ))
+
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(appointee = case_when(
+                type.employee == "Staff" ~ FALSE,
+                TRUE ~ appointee
+        ))
 # Ideas for further wrangling --------------------------------------------------
 
 # I consider deleting: "posn_suff", "monthly_salary_equivalent", and "rank_name"

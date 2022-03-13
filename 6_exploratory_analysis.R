@@ -40,8 +40,8 @@ my_fun <- function(arg1, arg2) {
 # 3 - Explore
 #*******************************************************************************
 
-# Look at the structure of the data frame
-str(osu)
-glimpse(osu)
-skim(osu)
-
+# Customer Requests
+#   Headcount
+osu %>%
+  group_by(type.employee) %>%
+  summarize(count = length(unique(name.full)))
