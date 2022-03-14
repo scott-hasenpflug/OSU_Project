@@ -1,9 +1,3 @@
----
-output:
-  pdf_document: default
-  html_document: default
----
-
 ## README
 
 Repository for OSU Salary Analysis project
