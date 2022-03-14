@@ -1,12 +1,7 @@
-To-do:
-Build an OSU CSS
-Build an R Markdown report - Bookdown?
-Build a Shiny app
-Build a Flexdashboard
-
 Requests:
+
 *Head count
-Full Time Equivalent
+*Full Time Equivalent
 Tenure v salary
 More granular salary and tenure bins
 Salary of professor v other instructor by employment length
@@ -26,3 +21,22 @@ and the bottom of the Director range.
 
 Also would be interesting to know the percentage of titles that are Manager,
 Director, Executive Director, AVP/VP.
+
+Is there a common set of functions/titles in a college? Consistency v different models
+
+How many VPs and Deans (senior leaders) have been there over 5 years?
+
+Where has ther most hiring occured in the last 2 years (by unit and job)>
+
+What is the ratio of professors to instructors in all colleges?
+
+
+
+
+Future To-do:
+
+Fix initial imports so they download off web
+Build an OSU CSS
+Build an R Markdown report - Bookdown?
+Build a Shiny app
+Build a Flexdashboard

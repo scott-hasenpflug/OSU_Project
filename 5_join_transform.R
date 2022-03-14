@@ -19,6 +19,7 @@ library(scales)
 library(knitr)
 library(stringr)
 library(tibble)
+library(gender)
 
 #*******************************************************************************
 # 1 - Source Data Frames 
@@ -143,6 +144,25 @@ osu_wth_appt <- osu_wth_appt %>%
                 type.employee == "Staff" ~ FALSE,
                 TRUE ~ appointee
         ))
+
+# Change Staff tenure.log from NA to FALSE
+osu_wth_appt <- osu_wth_appt %>%
+        replace_na(list(tenure.log = FALSE))
+
+# Make a data.frame with the best guess for each first name present
+#       Use a package called "gender"
+gender_guess <- distinct(
+        gender(osu_wth_appt$name.first, years = c(1950, 2004), method = "ssa", 
+               countries = "United States")[, c("name", "gender")])
+
+# Use left_join to give everyone their gender
+osu_wth_appt <- left_join(osu_wth_appt, gender_guess, by = c("name.first" = "name")) %>%
+        mutate(gender = str_to_title(gender)) %>%
+        replace_na(list(gender = "Unknown")) %>%
+        relocate(gender, .after = name.full)
+
+rm(gender_guess)
+
 # Ideas for further wrangling --------------------------------------------------
 
 # I consider deleting: "posn_suff", "monthly_salary_equivalent", and "rank_name"
@@ -150,14 +170,12 @@ osu_wth_appt <- osu_wth_appt %>%
 
 #! Factorize/sort rank_admin? 
 
-#! WFT Ed Ray?
-
 # Split and save the data frames -----------------------------------------------
 
 # Primary data frame will eliminate appointees. Keep osu_wth_appt in case I 
 # need them later
 osu <- osu_wth_appt %>%
-        filter(appointee == F)
+        filter(appointee == FALSE)
 
 save(osu, file = "osu_df.RData")
 save(osu_wth_appt, file = "osu_wth_appt_df.RData")
