@@ -135,7 +135,7 @@ RANK EFFECTIVE DATE:
 The date the faculty member achieved the current rank
 
 
-# Staff PDF Definitions
+## Staff PDF Definitions
 
 STAFF are employees represented by the Service Employees International Union (SEIU), Local 503, OPEU.
 
