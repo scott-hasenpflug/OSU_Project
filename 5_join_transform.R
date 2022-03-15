@@ -149,7 +149,15 @@ osu_wth_appt <- osu_wth_appt %>%
 osu_wth_appt <- osu_wth_appt %>%
         replace_na(list(tenure.log = FALSE))
 
-# Make a data.frame with the best guess for each first name present
+# Some first names are actually middle initials. Fix
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(name.first = case_when(
+                str_length(osu_wth_appt$name.first) == 1 ~ str_match(osu_wth_appt$name.full, pattern = SPC %R% WRD %R% SPC %R% capture(one_or_more(WRD)))[, 2],
+                id == "F-2872" ~ "KJ",
+                TRUE ~ as.character(name.first)
+        ))
+
+#Make a data.frame with the best guess for each first name present
 #       Use a package called "gender"
 gender_guess <- distinct(
         gender(osu_wth_appt$name.first, years = c(1950, 2004), method = "ssa", 
@@ -161,14 +169,18 @@ osu_wth_appt <- left_join(osu_wth_appt, gender_guess, by = c("name.first" = "nam
         replace_na(list(gender = "Unknown")) %>%
         relocate(gender, .after = name.full)
 
-rm(gender_guess)
+# Make KJ "Female"
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(name.first = replace(
+                name.first, name.first == "J", "KJ"))
+# Clean NAs --------------------------------------------------------------------
 
-# Ideas for further wrangling --------------------------------------------------
-
-# I consider deleting: "posn_suff", "monthly_salary_equivalent", and "rank_name"
-#   but will leave them for now
-
-#! Factorize/sort rank_admin? 
+osu_wth_appt["pay.annual.adj"][is.na(osu_wth_appt["pay.annual.adj"])] <- 0
+osu_wth_appt["rank.admin"][is.na(osu_wth_appt["rank.admin"])] <- "None"
+osu_wth_appt["rank.acad"][is.na(osu_wth_appt["rank.acad"])] <- "None"
+osu_wth_appt["rank.name"][is.na(osu_wth_appt["rank.name"])] <- "No Rank"
+osu_wth_appt["senior"][is.na(osu_wth_appt["senior"])] <- FALSE
+osu_wth_appt["name.first"][is.na(osu_wth_appt["name.first"])] <- "Shamsunnahar"
 
 # Split and save the data frames -----------------------------------------------
 
