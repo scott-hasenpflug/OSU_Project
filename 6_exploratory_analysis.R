@@ -27,58 +27,201 @@ library(formattable)
 # End Section 0 ----
 
 #*******************************************************************************
-# 1 - Source Data Frames 
+# 1 - Source/Transform Data Frame 
 #*******************************************************************************
 
 # Load -------------------------------------------------------------------------
-load("osu_df.RData") 
 
-# Un-comment if you want appointees in the data set
-#load("osu_wth_appt_df.RData")
+load("osu_wth_appt_df.RData")
+
+# Fix the remaining unknown genders --------------------------------------------
+
+# Since the gender package seems to link to rate limited websites I already
+#   exceeded in testing, I am finalizing the gender assignment in this script
+#   so I don't need to run script 5 again.
+
+# Make a list of ids of "Unknowns" which I determined to be male with Google 
+#   and eyeballs.
+male_fac <- c(2692, 5504, 3960, 3361, 4159, 6150, 2613, 2783, 988, 976, 3281, 
+              2766, 451, 4993, 6206, 986, 6227, 963, 2451, 2452, 164, 5150,
+              6270, 2489, 6207, 3410, 5906, 3474, 5569, 1039)
+male_fac <- paste0("F-", male_fac)
+male_staff <- c(884, 1395, 13, 735)
+male_staff <- paste0("S-", male_staff)
+male_list <- c(male_fac, male_staff)
+
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(gender= case_when(
+    id %in% male_list ~ "Male",
+    gender == "Unknown" & !(id %in% male_list) ~ "Female",
+    TRUE ~ as.character(gender)
+  ))
+
+# Annualize Part-time salary ---------------------------------------------------
+
+# Make pay.annualized equal the pay rate for hourly and monthly employees if 
+#   they were full-time (pay.annualized). Round both "pay" columns. 
+#   Move full.time between pay.actual (The actual salary cost of the employee) 
+#   and pay.annualized for ease of reading. Remove pay.monthly.equiv since it is
+#    now redundant.
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(pay.annualized = case_when(
+    pay.annualized == 0 & is.na(pay.monthly) ~ pay.hourly * 2080,
+    pay.annualized == 0 & is.na(pay.hourly) ~ pay.monthly * 12,
+    TRUE ~ as.numeric(pay.annualized)
+  )) %>%
+  mutate(pay.actual = round(pay.actual),
+         pay.annualized = round(pay.annualized)) %>%
+  relocate(full.time, .after = pay.actual)
+
+# Logical "Football" -----------------------------------------------------------
+
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(football = str_detect(job.title, "Football|FB"))
+
+# Capture coach ranks in rank.ath -----------------------------------------------
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(rank.ath = case_when(
+    str_detect(job.title, "Head Coach") & !(str_detect(
+      job.title, "Associate")) ~ "Head Coach",
+    str_detect(job.title, "Head Coach") & str_detect(
+      job.title, "Associate|Assoc HC") ~ "Assoc Head Coach",
+    str_detect(job.title, "Asst Coach|Assistant Coach|Assoc Coach|Cond Coach") 
+    ~ "Assistant Coach",
+    TRUE ~ "None"),
+         job.title = case_when(
+    name.full == "Foster, Allison K" ~ "Assoc Head Coach-Women's Rowing",
+    TRUE ~ as.character(job.title)))
+
+# Turn ADs into VPs ------------------------------------------------------------
+
+# Assumption I'm making that they're equivalent
+osu_wth_appt <-  osu_wth_appt%>%
+  mutate(rank.admin = case_when(
+    str_detect(job.title, "Assoc AD|AssocAD") ~ "Associate AD",
+    str_detect(job.title, "Assistant AD|Asst AD") ~ "Assistant AD",
+    TRUE ~ as.character(rank.admin)
+  ))
+
+# Categorize rank.admin --------------------------------------------------------
+
+sen_exec <- c("Dean", "President", "Vice President", "Vice Provost") 
+exec <- c("Assistant Vice Provost", "Assistant VP", "Associate Vice Provost",
+      "Associate VP")
+dir_lev <- c("Assistant Director", "Associate AD", "Associate Dean",
+      "Associate Director", "Associate Head", "Associate School Head", 
+      "Chair", "Department Head", "Director", "School Head")
+man_lev <- c("Assistant Dean", "Assistant AD", "Assistant Manager",
+      "Assistant School Head", "Associate Department Head", "Associate Manager",
+      "Manager")
+asst <- c("Administrative Assistant", "Executive Assistant")
+
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(exec.cat = case_when(
+    rank.admin %in% sen_exec ~ "Senior Executive",
+    rank.admin %in% exec ~ "Executive",
+    rank.admin %in% dir_lev ~ "Director Level",
+    rank.admin %in% man_lev ~ "Manager Level",
+    rank.admin %in% asst ~ "Support",
+    TRUE ~ "None"
+  ))
+
+# Split and save data frames again ---------------------------------------------
+# Save data frames separately so I can analyze without appointees or fellows
+osu <- osu_wth_appt %>%
+  filter(appointee == FALSE, pay.actual != 0)
+
+save(osu, file = "osu_df.RData")
+save(osu_wth_appt, file = "osu_wth_appt_df.RData")
+
+# osu is the working data frame. osu_wth_appt is saved in the WD but I will 
+#   remove it from the global environment for this script, along with other 
+#   unneeded values
+rm(osu_wth_appt, male_fac, male_list, male_staff, asst, dir_lev, exec, man_lev,
+   sen_exec)
+
 
 # End Section 1 ----
 
 #*******************************************************************************
-# 2 - Custom Functions
+# 2 - Custom Values
+#*******************************************************************************
+# Start ----
+beav.Orange <- "#D73F09"
+beav.Black <- "#000000"
+colleges <- {c("College of Agriculture" = "Agriculture",
+                   "College of Business" = "Business",
+                   "College of Earth, Ocean, and Atmospheric Sciences" = "EO&A",
+                   "College of Education" = "Education",
+                   "College of Engineering" = "Engineering",
+                   "College of Forestry" = "Forestry",
+                   "College of Liberal Arts" = "LibArts",
+                   "College of Pharmacy" = "Pharmacy",
+                   "College of Public Health and Human Services" = "Health",
+                   "College of Science" = "Science",
+                   "College of Veterinary Medicine" = "Veterinary")}
+
+# End Section 2 ----
+
+#*******************************************************************************
+# 3 - Custom Functions
 #*******************************************************************************
 
-# Complete ---------------------------------------------------------------------
+# Complete =====================================================================
+# Headcount/FTE ----------------------------------------------------------------
 report_head <- function(group1 = home.category, group2 = NULL, group3 = NULL, 
                         group4 = NULL, sort = headcount) {
   osu %>%
     group_by({{group1}}, {{group2}}, {{group3}}, {{group4}}) %>%
     summarize(headcount = length(unique(name.full)),
               fte = sum(percent.time)/100,
-              median_pay = median(pay.annual.adj, na.rm = TRUE),
+              median_annualized_pay = accounting(median(pay.annualized)),
+              median_actual_pay = accounting(median(pay.actual)),
               average_tenure = mean(tenure.yrs)) %>%
     arrange(desc({{sort}}))
 }
+# Test
+report_head(sort = median_annualized_pay) %>% filter(headcount < fte)
+# How are 6 headcounts lower than FTE?
 
+# A lot of people have personal headcounts over 1
+osu %>% group_by(name.full) %>% summarize(fte = sum(percent.time/100)) %>%
+  filter(fte > 1) %>% arrange(desc(fte))
+
+# This shows who they work for. Most have jobs in the same org but not all
+osu %>% group_by(name.full) %>% 
+  summarize(fte = sum(percent.time/100), org = list(job.category)) %>%
+  arrange(desc(fte)) # %>% view()
+
+# Spending ---------------------------------------------------------------------
 report_spend <- function(group = home.category, sort = cost) {
-  budget <- sum(osu$pay.annual.adj)
+  budget <- sum(osu$pay.actual)
   osu %>%
     group_by({{group}}) %>%
-    summarise(cost = accounting(sum(pay.annual.adj),0), 
-              share = percent(sum(pay.annual.adj)/sum(budget)),
-              fte = accounting(sum(pay.annual.adj)/(sum(percent.time)/100),0),
-              head = accounting(sum(pay.annual.adj)/length(unique(name.full)),0)) %>%
+    summarise(cost = accounting(sum(pay.actual),0), 
+              share = percent(sum(pay.actual)/sum(budget)),
+              fte = accounting(sum(pay.actual)/(sum(percent.time)/100),0),
+              head = accounting(sum(
+                pay.actual)/length(unique(name.full)),0)) %>%
     relocate({{sort}}, .after = {{group}}) %>%
     arrange(desc({{sort}}))
 }
+# Test
+report_spend()
 
-# Incomplete -------------------------------------------------------------------
-
+# Incomplete ===================================================================
+# Tenure -----------------------------------------------------------------------
 report_tenure <- function(var) {
   # Action
 }
 
-# End Section 2 ----
+# End Section 3 ----
 
 #*******************************************************************************
-# 3 - Customer Requests
+# 4 - Customer Requests
 #*******************************************************************************
 
-# Headcount/FTE * ------------------------------------------------------------
+# * Headcount/FTE ------------------------------------------------------------
 
 # Headcount
 #   I wrote a function: report_head
@@ -89,106 +232,270 @@ report_head(type.employee)
 report_head(type.employee, full.time)
 report_head(type.employee, full.time, loaner)
 report_head(type.employee, full.time, loaner, job.type)
-report_head(type.employee, full.time, loaner, job.type, sort = median_pay)
+report_head(type.employee, full.time, loaner, job.type, sort = median_annualized_pay)
 report_head(sort = average_tenure)
 
-# Gender Splits * ----------------------------------------------------------------
+# * Gender Splits --------------------------------------------------------------
 #   Examine differences in gender. Try to find out why Unknown genders (unusual 
 #   first names) get paid more 
 
-# Group by gender and staff/faculty, look at pay
+# Annualized Salary by Gender and Type
 osu %>%
   group_by(gender, type.employee) %>%
-  summarize(Median_Salary = median(pay.annual.adj, na.rm = TRUE),
-            Average_Salary = mean(pay.annual.adj, na.rm = TRUE),
+  summarize(Median_Salary = accounting(median(pay.annualized),0),
+            Average_Salary = accounting(mean(pay.annualized),0),
             Count = n()) %>%
   arrange(desc(Median_Salary))
-# Faculty of unknown gender make the most. Interesting, but relatively few of 
-# them. The rest rank as you would assume
 
-# Get the gender split by employee type.
+# By employee type
 osu %>%
   group_by(type.employee) %>%
   summarize(Male = percent(sum(gender == "Male")/n(), .1),
             Female = percent(sum(gender == "Female")/n(), .1),
-            Unknown = percent(sum(gender == "Unknown")/n(), .1),
-            Count = n())
-# Faculty is less female dominated than staff and has more "unknowns"
-
-osu %>%
-  group_by(tenure.log) %>%
-  summarize(Male = percent(sum(gender == "Male")/n(), .1),
-            Female = percent(sum(gender == "Female")/n(), .1),
-            Unknown = percent(sum(gender == "Unknown")/n(), .1),
             Count = n())
 
+# Percent tenured by gender
 osu %>%
-  group_by(type.employee) %>%
-  summarize(Male = percent(sum(gender == "Male")/n(), .1),
-            Female = percent(sum(gender == "Female")/n(), .1),
-            Unknown = percent(sum(gender == "Unknown")/n(), .1),
-            Count = n())
-
-osu %>%
-  group_by(type.employee, tenure.log) %>%
-  summarize(Male = percent(sum(gender == "Male")/n(), .1),
-            Female = percent(sum(gender == "Female")/n(), .1),
-            Unknown = percent(sum(gender == "Unknown")/n(), .1),
+  filter(type.employee == "Faculty") %>%
+  group_by(gender) %>%
+  summarize(Tenured = percent(sum(tenure.log == TRUE) / 
+                                sum(tenure.log == FALSE), 1),
             Count = n())
 
 # Tenure v Salary --------------------------------------------------------------
-
-
-
 # More granular salary and tenure bins -----------------------------------------
 # Salary of professor v other instructor by employment length ------------------
-# Is the % of tenured faculty consistent across units? -------------------------
-# Pay rates for different types of faculty -------------------------------------
-# Do classified pay rates correlate with tenure --------------------------------
-# Overlap in compensation rates across classified and unclassified -------------
-# Compare IT compensation specifically -----------------------------------------
-# Director position title inflation --------------------------------------------
+# * Is the % of tenured faculty consistent across units? -------------------------
+
+tenure_spread <- osu %>%
+  filter(str_detect(job.category, "College of")) %>%
+  group_by(job.category) %>%
+  summarize(Tenured = percent(sum(tenure.log)/n(),1)) %>%
+  arrange(desc(Tenured))
+
+ggplot(tenure_spread, aes(x= reorder(job.category, -Tenured), Tenured)) + 
+  geom_col(fill = beav.Orange) + 
+  scale_x_discrete(NULL, labels = labs.Colleges) +
+  scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
+  theme_minimal() + 
+  labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
+
+# Layer median salary on top of above graph * ----------------------------------
+
+tenure_spread2 <- osu %>%
+  filter(str_detect(job.category, "College of")) %>%
+  group_by(job.category) %>%
+  summarize(Tenured = percent(sum(tenure.log)/n(),1))
+
+med_pay <-osu %>%
+  filter(str_detect(job.category, "College of") & tenure.log == TRUE) %>%
+  group_by(job.category) %>%
+  summarize(Salary = median(pay.annualized))
+
+# This data frame has the right data for the chart
+layered_try <- full_join(tenure_spread2, med_pay) 
+rm(tenure_spread2, med_pay)
+
+#Try 1
+ggplot(layered_try, aes(x= reorder(job.category, -Tenured), Tenured)) + 
+  geom_col(fill = beav.Orange) + 
+  geom_point(aes(size = Salary)) +
+  scale_x_discrete(NULL, labels = labs.Colleges) +
+  scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
+  theme_minimal() + 
+  labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
+
+ggplot(layered_try, aes(x= reorder(job.category, -Tenured), Tenured)) + 
+  #geom_col(fill = beav.Orange) + 
+  geom_segment(aes(x=job.category, xend=job.category, y=0, yend=Tenured)) +
+  geom_point(aes(color = beav.Orange, size = Salary)) +
+  scale_size_area(max_size = 30) +
+  scale_x_discrete(NULL, labels = labs.Colleges) +
+  scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
+  theme_minimal() + 
+  labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
+
+# * Pay rates for different types of faculty * ---------------------------------
+
+distinct(osu$rank.admin)
+
+#Admin
+osu %>%
+  filter(rank.admin != "None") %>%
+  group_by(rank.admin) %>%
+  summarize(Pay = median(pay.annualized)) %>%
+  arrange(desc(Pay)) %>%
+  ggplot(aes(x= reorder(rank.admin, -Pay), Pay)) + 
+    geom_col(fill = beav.Black) +
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme_minimal() +
+    labs(title = "Median Annualized Salart", subtitle =  "by Administrative Rank")
+
+#Academic
+osu %>%
+  filter(rank.acad != "None") %>%
+  group_by(rank.acad) %>%
+  summarize(Pay = median(pay.annualized)) %>%
+  arrange(desc(Pay)) %>%
+  ggplot(aes(x= reorder(rank.acad, -Pay), Pay)) + 
+    geom_col(fill = beav.Orange) +
+    theme(axis.text.x = element_text(angle = 90)) +
+    theme_minimal()
+
+# Do Faculty pay rates correlate with tenure -----------------------------------
+# Overlap in compensation rates across Faculty and Staff -----------------------
+# * Compare IT compensation specifically ---------------------------------------
+
+osu %>% 
+  filter(job.category  == "University Information and Technology") %>% 
+  group_by(type.employee) %>%
+  summarize(Salary = median(pay.annualized))
+
+# Director position title inflation * ------------------------------------------
+
+unique(osu$rank.admin)
+
+osu %>%
+  filter(rank.admin %in% c("Director", "Assistant Director", 
+                           "Associate Director")) %>%
+  count(type.employee)
+
+osu %>%
+  filter(rank.admin %in% c("Director", "Assistant Director", 
+                           "Associate Director")) %>%
+  group_by(job.category, rank.admin) %>%
+  summarize(median(pay.annualized))
+# How are we defining "inflation?
+
+
 # Distribution of salaries (by bin) of Director titles vs. Manager -------------
-# Percentage of titles: Manager, Director, Executive Director, AVP/VP ----------
-# How many VPs and Deans (senior leaders) have been there over 5 years? --------
-# Where has ther most hiring occured in the last 2 years (by unit and job)? ----
-# What is the ratio of professors to instructors in all colleges? --------------
-# What colleges have the highest salaries for professors? ----------------------
+# * Percentage of titles: Manager, Director, Executive Director, AVP/VP --------
+
+osu %>%
+  filter(rank.admin != "None") %>%
+  group_by(rank.admin) %>%
+  summarize(Number = n(), Percent = percent(n() / nrow(osu)), 
+            Of_Ranks = percent(n()/sum(osu$rank.admin != "None"))) %>%
+  arrange(desc(Percent))
+
+# * How many VPs and Deans (senior leaders) have been there over 5 years? ------
+
+osu %>%
+  filter(rank.admin != "None") %>%
+  group_by(rank.admin) %>%
+  summarize(Number = n(), Over_5 = sum(tenure.yrs >= 5), 
+             Percent = Over_5/n()) %>%
+  arrange(desc(Percent))
+
+# * Where has the most hiring occured in the last 2 years (by unit and job)? -----
+
+osu %>%
+  group_by(job.category) %>%
+  summarize(Newbies = percent(sum(tenure.yrs <= 1)/n(), 1), 
+            newbieCount = sum(tenure.yrs <= 1), totalCount = n()) %>%
+  arrange(desc(Newbies))
+
+osu %>%
+  filter(exec.cat != "None") %>%
+  group_by(exec.cat) %>%
+  summarize(Newbies = percent(sum(tenure.yrs <= 1)/n(), 1), 
+            newbieCount = sum(tenure.yrs <= 1), totalCount = n()) %>%
+  arrange(desc(Newbies))
+
+# * What is the ratio of professors to instructors in all colleges? ------------
+
+osu %>%
+  filter(rank.acad != "None", str_detect(job.category, "College")) %>%
+  group_by(job.category) %>%
+  summarize(Professors = sum(rank.acad %in% c("Professor", 
+                              "Associate Professor", "Assistant Professor")),
+            nonProfs = sum(rank.acad %in% c("Instructor", "Researcher",
+                                            "Lecturer")), 
+            Ratio = paste0(round(Professors/nonProfs, 2)," : ","1")) %>%
+  arrange(desc(Ratio))
+
+# * What colleges have the highest salaries for professors? * ------------------
+
+# All admin ranks
+osu %>% 
+  filter(rank.acad != "None", str_detect(job.category, "College")) %>%
+  group_by(job.category) %>%
+  summarize(Median = median(pay.annualized)) %>%
+  arrange(desc(Median))
+
+# By Rank
+academicPayChart <- osu %>% 
+  filter(rank.acad != "None", str_detect(job.category, "College")) %>%
+  group_by(job.category) %>%
+  summarize(Professor = median(pay.annualized[rank.acad == "Professor"]),
+            AssocProfessor = median(
+              pay.annualized[rank.acad == "Associate Professor"]),
+            AssistProfessor = median(
+              pay.annualized[rank.acad == "Assistant Professor"]),
+            Researcher = median(
+              pay.annualized[rank.acad == "Researcher"], na.rm = TRUE),
+            Instructor = median(
+              pay.annualized[rank.acad %in% c("Instructor", "Lecturer")])) %>%
+  arrange(desc(Professor))
+
+# Bump Chart Table
+bumpTable <- osu %>% 
+  filter(rank.acad != "None", str_detect(job.category, "College")) %>%
+  group_by(job.category) %>%
+  summarize(Professor = median(
+    pay.annualized[rank.acad == "Professor"]),
+            AssocProfessor = median(
+              pay.annualized[rank.acad == "Associate Professor"]),
+            AssistProfessor = median(
+              pay.annualized[rank.acad == "Assistant Professor"]),
+            Researcher = median(
+              pay.annualized[rank.acad == "Researcher"], na.rm = TRUE),
+            Instructor = median(
+              pay.annualized[rank.acad %in% c("Instructor", "Lecturer")])) %>%
+  arrange(desc(Professor)) %>%
+  mutate(Professor = rank(-Professor),
+         AssocProfessor = rank(-AssocProfessor),
+         AssistProfessor = rank(-AssistProfessor),
+         Researcher = rank(-Researcher),
+         Instructor = rank(-Instructor))
+
+# Bump Chart
+ggplot(bumpTable, aes(x = c(Professor, AssocProfessor, 
+              AssistProfessor, Researcher, Instructor), group = job.category)) +
+  geom_line(aes(color = job.category)) +
+  geom_point(aes(color = job.category))
+
 # Network diagram - What orgs hire from what orgs ------------------------------
 # Network diagram - Relationship between Extension Service and College ---------
 # Range of compensation and tenure for exec/admin assistants -------------------
 # Overlap in compensation rates staff/faculty ----------------------------------
 # Are IT positions across staff/faculty compensated equally? -------------------
 # Do pay rates for staff in same title correlate with tenure? ------------------
-# Most common staff titles? ----------------------------------------------------
+# * Most common staff titles? --------------------------------------------------
+
+osu %>%
+  filter(type.employee == "Staff") %>%
+  count(job.title, sort = TRUE)
+
 # Headcount visual per school by job bracket and employee class ----------------
-# Is grad student info anywhere in this dataset? -------------------------------
+# Is grad student info anywhere in this data set? ------------------------------
 # Can I break out tenure/tenure track? -----------------------------------------
 # Add title of person's supervisor to some degree, maybe just school prez ------
+# End Section 4 ----
 
 #*******************************************************************************
-# 4 - My Exploration
+# 5 - My Exploration
 #*******************************************************************************
 
-# Check for duplicate full names -----------------------------------------------
+# Check for duplicate full names * -----------------------------------------------
 osu$name.full[duplicated(osu$name.full)]
 
 #doesn't work because of multiple jobs. Come back later'
 
-# Spending report * --------------------------------------------------------------
-#   I wrote a function: report_spend
-#   Takes two arguments: Group variable, and sort by: (share, cost, fte, head)
-
-# Examples:
-report_spend()
-report_spend(type.employee)
-report_spend(gender, share)
-
-
-# Salary model -----------------------------------------------------------------
+# Salary model -------- Needs Update -------------------------------------------
 
 # Original model
-mdl_pay_osu <- lm(pay.annual.adj ~ gender + type.employee + tenure.yrs +
+mdl_pay_osu <- lm(pay.annualized ~ gender + type.employee + tenure.yrs +
                   loaner + percent.time + rank.admin + rank.acad + job.category
                   + senior + job.type, osu)
 
@@ -198,14 +505,14 @@ osu_no_hfc <- osu %>%
 
 # Filter out top paid in athletics (mostly coaches but captures AD and astaff)
 osu_no_top_coaches <-  osu %>%
-  filter(job.code != "YIA" | pay.annual.adj < 150000)
+  filter(job.code != "YIA" | pay.annualized < 150000)
 
 # Filter out all in athletic department
 osu_no_YIA <-  osu %>%
   filter(job.code != "YIA")
 
 # Original model
-mdl_pay_osu <- lm(pay.annual.adj ~ gender + type.employee + tenure.yrs +
+mdl_pay_osu <- lm(pay.annualized ~ gender + type.employee + tenure.yrs +
                   loaner + percent.time + rank.admin + rank.acad + job.category 
                   + senior + job.type, osu)
 
@@ -215,7 +522,7 @@ mdl_pay_osu %>%
 # 0.510914
 
 # Model no head football coach
-mdl_pay_no_hfc <- lm(pay.annual.adj ~ gender + type.employee + tenure.yrs +
+mdl_pay_no_hfc <- lm(pay.annualized ~ gender + type.employee + tenure.yrs +
                        loaner + percent.time + rank.admin + rank.acad + job.category + 
                        senior + job.type, osu_no_hfc)
 
@@ -225,7 +532,7 @@ mdl_pay_no_hfc %>%
 # 0.6515625
 
 # Model no coaches
-mdl_pay_no_coaches <- lm(pay.annual.adj ~ gender + type.employee + tenure.yrs +
+mdl_pay_no_coaches <- lm(pay.annualized ~ gender + type.employee + tenure.yrs +
                            loaner + percent.time + rank.admin + rank.acad + job.category + 
                            senior + job.type, osu_no_top_coaches)
 
@@ -235,7 +542,7 @@ mdl_pay_no_coaches %>%
 # 0.745358
 
 # Model no athletic department
-mdl_pay_no_YIA <- lm(pay.annual.adj ~ gender + type.employee + tenure.yrs +
+mdl_pay_no_YIA <- lm(pay.annualized ~ gender + type.employee + tenure.yrs +
                        loaner + percent.time + rank.admin + rank.acad + job.category + 
                        senior + job.type, osu_no_YIA)
 

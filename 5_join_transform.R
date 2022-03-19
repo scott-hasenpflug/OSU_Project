@@ -69,14 +69,13 @@ osu_wth_appt <- osu_wth_appt %>%
 
 # Define variable categories
 cols_critical <- c("full_name", "type", "job_title", "salary_adj", 
-                   "tenure", "job_category", "loaner", "full_time", 
-                   "rank_admin", "rank_academic", "ID")
+                   "annual_salary_rate", "tenure", "job_category", "loaner", 
+                   "full_time", "rank_admin", "rank_academic", "ID")
 cols_logical <- c("has_tenure", "appointee", "senior_designation")
 cols_date <- c("first_hired", "adj_service_date", "rank_effective_date", 
           "appt_begin_date", "appt_end_date")
-cols_numeric <- c("annual_salary_rate", "monthly_salary_rate", 
-                  "hourly_salary_rate", "appt_percent", "posn_suff", 
-                  "monthly_salary_equivalent")
+cols_numeric <- c("monthly_salary_rate", "hourly_salary_rate", "appt_percent", 
+                  "posn_suff", "monthly_salary_equivalent")
 cols_factor <- c("tenure_bin", "salary_bin")
 cols_character <- c("job_type", "first_name", "last_name", "home_org_code",
                     "job_org_code", "home_orgn", "home_category",
@@ -97,7 +96,7 @@ osu_wth_appt <- osu_wth_appt %>%
                 name.full = full_name,
                 type.employee = type,
                 job.title= job_title,
-                pay.annual.adj = salary_adj,
+                pay.actual = salary_adj,
                 tenure.yrs = tenure,
                 job.category = job_category,
                 loaner = loaner,
@@ -113,7 +112,7 @@ osu_wth_appt <- osu_wth_appt %>%
                 date.rank.eff = rank_effective_date,
                 date.appt.begin = appt_begin_date,
                 date.appt.end = appt_end_date,
-                pay.annual = annual_salary_rate,
+                pay.annualized = annual_salary_rate,
                 pay.monthly= monthly_salary_rate,
                 pay.hourly = hourly_salary_rate,
                 percent.time = appt_percent,
@@ -152,7 +151,9 @@ osu_wth_appt <- osu_wth_appt %>%
 # Some first names are actually middle initials. Fix
 osu_wth_appt <- osu_wth_appt %>%
         mutate(name.first = case_when(
-                str_length(osu_wth_appt$name.first) == 1 ~ str_match(osu_wth_appt$name.full, pattern = SPC %R% WRD %R% SPC %R% capture(one_or_more(WRD)))[, 2],
+                str_length(osu_wth_appt$name.first) == 1 ~ str_match(
+                        osu_wth_appt$name.full, pattern = SPC %R% WRD %R% SPC 
+                        %R% capture(one_or_more(WRD)))[, 2],
                 id == "F-2872" ~ "KJ",
                 TRUE ~ as.character(name.first)
         ))
@@ -164,30 +165,58 @@ gender_guess <- distinct(
                countries = "United States")[, c("name", "gender")])
 
 # Use left_join to give everyone their gender
-osu_wth_appt <- left_join(osu_wth_appt, gender_guess, by = c("name.first" = "name")) %>%
+osu_wth_appt <- left_join(osu_wth_appt, gender_guess, 
+                          by = c("name.first" = "name")) %>%
         mutate(gender = str_to_title(gender)) %>%
         replace_na(list(gender = "Unknown")) %>%
         relocate(gender, .after = name.full)
+# 345 could not be determined
 
-# Make KJ "Female"
+# Try another method with the remainder
+gender_guess2 <- osu_wth_appt %>%
+        filter(gender== "Unknown") %>%
+        distinct(
+                gender(name.first, method = "genderize")[, c("name", "gender")])
+# That found 261 of those 345. Only 16 are still unknown.
+
+# Use left_join to give those 261  employees their gender
+osu_wth_appt <- left_join(osu_wth_appt, gender_guess2, 
+                           by = c("name.first" = "name"))
+
+# Now have two gender columns. Fix
+osu_wth_appt <- osu_wth_appt %>%
+        mutate(gender.x = case_when(
+                gender.x == "Unknown" ~ as.character(gender.y),
+                TRUE ~ as.character(gender.x)),
+               gender.x = str_to_title(gender.x)) %>%
+        replace_na(list(gender.x = "Unknown")) %>%
+        select(-gender.y) %>%
+        rename(gender = gender.x)
+
+# Check
+osu_wth_appt %>% count(gender)
+
+# Only 72 of 7712 (jobs, not necessarily people) have no gender. 0.93%
+        
+# Make KJ "Female" just because I happened to look her up. gender_guess2
+#       assigned some of the one letter first names a gender. I'm fine with it
+#       but I had already coded this previously.
 osu_wth_appt <- osu_wth_appt %>%
         mutate(name.first = replace(
-                name.first, name.first == "J", "KJ"))
+                name.first, name.first == "J", "KJ")) %>%
+        mutate(gender = case_when(
+                id == "F-2872" ~ "Female",
+                TRUE ~ as.character(gender)
+        ))
 # Clean NAs --------------------------------------------------------------------
 
-osu_wth_appt["pay.annual.adj"][is.na(osu_wth_appt["pay.annual.adj"])] <- 0
+osu_wth_appt["pay.annualized"][is.na(osu_wth_appt["pay.annualized"])] <- 0
 osu_wth_appt["rank.admin"][is.na(osu_wth_appt["rank.admin"])] <- "None"
 osu_wth_appt["rank.acad"][is.na(osu_wth_appt["rank.acad"])] <- "None"
 osu_wth_appt["rank.name"][is.na(osu_wth_appt["rank.name"])] <- "No Rank"
 osu_wth_appt["senior"][is.na(osu_wth_appt["senior"])] <- FALSE
 osu_wth_appt["name.first"][is.na(osu_wth_appt["name.first"])] <- "Shamsunnahar"
 
-# Split and save the data frames -----------------------------------------------
+# Split and save the data frame -----------------------------------------------
 
-# Primary data frame will eliminate appointees. Keep osu_wth_appt in case I 
-# need them later
-osu <- osu_wth_appt %>%
-        filter(appointee == FALSE)
-
-save(osu, file = "osu_df.RData")
 save(osu_wth_appt, file = "osu_wth_appt_df.RData")
