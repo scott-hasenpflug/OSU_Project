@@ -23,6 +23,7 @@ library(stringr)
 library(tibble)
 library(gender)
 library(formattable)
+library(swatches)
 
 # End Section 0 ----
 
@@ -126,6 +127,13 @@ osu_wth_appt <- osu_wth_appt %>%
     TRUE ~ "None"
   ))
 
+# Remove "Lecturers" -----------------------------------------------------------
+
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(rank.acad = case_when(
+    rank.acad == "Lecturer" ~ "Instructor",
+    TRUE ~ as.character(rank.acad)))
+
 # Split and save data frames again ---------------------------------------------
 # Save data frames separately so I can analyze without appointees or fellows
 osu <- osu_wth_appt %>%
@@ -141,14 +149,56 @@ rm(osu_wth_appt, male_fac, male_list, male_staff, asst, dir_lev, exec, man_lev,
    sen_exec)
 
 
+# Load osu ---------------------------------------------------------------------
+load("osu_df.RData")
 # End Section 1 ----
 
 #*******************************************************************************
 # 2 - Custom Values
 #*******************************************************************************
 # Start ----
-beav.Orange <- "#D73F09"
-beav.Black <- "#000000"
+# Colors -----------------------------------------------------------------------
+
+# https://communications.oregonstate.edu/brand-guide/visual-identity/colors
+
+Palette <- read_ase("OSU_rgb_2018.ase", use_names = TRUE, .verbose = FALSE)
+
+beaver.Orange <- "#D73F09"
+paddletail.Black <- "#000000"
+pane.Stand <-  "#4A773C"
+high.Tide <- "#00859B"
+luminance <- "#FFB500#"
+stratosphere <- "#006A8E"
+reindeer.Moss <- "#C4D6A4"
+seafoam <- "#B8DDE1"
+candela <- "#FDD26E"
+moondust <- "#C6DAE7"
+hop.Bine <- "#AA9D2E"
+rogue.Wave <- "#0D5257"
+solar.Flare <- "#D3832B"
+star.Canvas <- "#003B5C"
+till <- "#B7A99A"
+coastline <- "#A7ACA2"
+high.Desert <- "#7A6855"
+crater <- "#8E9089"
+
+# Fonts ------------------------------------------------------------------------
+
+# https://communications.oregonstate.edu/brand-guide/visual-identity/typography
+
+# "Stratum 2" (display font, headlines at 18 points or larger, no body copy) 
+#   "Impact as a substitute.
+
+# "Georgia" (serif font. Best for headliners and subheads, not body)
+
+# "Kievit" (smaller headlines, body copy and captions)
+#   "Verdana" as a substitute.
+
+# Business correspondence: 
+#   Serif: "Georgia"
+#   Sans Serif: "Calibri"
+
+# Lists ------------------------------------------------------------------------
 colleges <- {c("College of Agriculture" = "Agriculture",
                    "College of Business" = "Business",
                    "College of Earth, Ocean, and Atmospheric Sciences" = "EO&A",
@@ -235,6 +285,7 @@ report_head(type.employee, full.time, loaner, job.type)
 report_head(type.employee, full.time, loaner, job.type, sort = median_annualized_pay)
 report_head(sort = average_tenure)
 
+
 # * Gender Splits --------------------------------------------------------------
 #   Examine differences in gender. Try to find out why Unknown genders (unusual 
 #   first names) get paid more 
@@ -262,9 +313,33 @@ osu %>%
                                 sum(tenure.log == FALSE), 1),
             Count = n())
 
+
 # Tenure v Salary --------------------------------------------------------------
-# More granular salary and tenure bins -----------------------------------------
+
 # Salary of professor v other instructor by employment length ------------------
+
+## Combined
+osu %>%
+  filter(rank.acad != "None") %>%
+  group_by(rank.acad) %>%
+  summarize(tenure = tenure.yrs, pay = pay.annualized) %>%
+  ggplot(aes(tenure, pay, color = rank.acad)) +
+    geom_point(position = "jitter") +
+    scale_y_continuous(labels = comma) +
+    theme_classic()
+
+## Facet wrapped by rank
+osu %>%
+  filter(rank.acad != "None") %>%
+  group_by(rank.acad) %>%
+  summarize(tenure = tenure.yrs, pay = pay.annualized) %>%
+  ggplot(aes(tenure, pay, color = rank.acad)) +
+  geom_point(position = "jitter") +
+  scale_y_continuous(labels = comma) +
+  theme_classic() +
+  facet_wrap(~rank.acad)
+
+
 # * Is the % of tenured faculty consistent across units? -------------------------
 
 tenure_spread <- osu %>%
@@ -275,10 +350,12 @@ tenure_spread <- osu %>%
 
 ggplot(tenure_spread, aes(x= reorder(job.category, -Tenured), Tenured)) + 
   geom_col(fill = beav.Orange) + 
-  scale_x_discrete(NULL, labels = labs.Colleges) +
+  scale_x_discrete(NULL, labels = colleges) +
   scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
   theme_minimal() + 
   labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
+
+
 
 # Layer median salary on top of above graph * ----------------------------------
 
@@ -315,6 +392,8 @@ ggplot(layered_try, aes(x= reorder(job.category, -Tenured), Tenured)) +
   theme_minimal() + 
   labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
 
+
+
 # * Pay rates for different types of faculty * ---------------------------------
 
 distinct(osu$rank.admin)
@@ -342,14 +421,48 @@ osu %>%
     theme(axis.text.x = element_text(angle = 90)) +
     theme_minimal()
 
-# Do Faculty pay rates correlate with tenure -----------------------------------
-# Overlap in compensation rates across Faculty and Staff -----------------------
+
+
+# Overlap in compensation rates across Faculty and Staff * ---------------------
+
+# Between all of Faculty and Staff
+## Removed execs, head coaches, and everyone football
+osu %>%
+  filter(rank.ath != "Head Coach", football == FALSE, exec.cat == "None") %>%
+  group_by(type.employee) %>%
+  summarize(pay = pay.annualized) %>%
+  ggplot(aes(type.employee, pay)) +
+    geom_boxplot() + 
+    scale_y_continuous(labels = comma)
+
+a <- osu %>%
+  filter(type.employee == "Faculty", rank.ath != "Head Coach", football == FALSE, exec.cat == "None")
+quantile(a$pay.annualized)
+
+b <- osu %>%
+  filter(type.employee == "Staff")
+quantile(b$pay.annualized)
+
+## IQR overlap: $55,071 - $60,792
+
+
 # * Compare IT compensation specifically ---------------------------------------
 
 osu %>% 
   filter(job.category  == "University Information and Technology") %>% 
   group_by(type.employee) %>%
   summarize(Salary = median(pay.annualized))
+
+osu %>% 
+  filter(job.category  == "University Information and Technology") %>% 
+  group_by(type.employee) %>%
+  summarize(pay = pay.annualized) %>%
+  ggplot(aes(type.employee, pay)) +
+  geom_boxplot() + 
+  scale_y_continuous(labels = comma)
+
+
+
 
 # Director position title inflation * ------------------------------------------
 
@@ -368,7 +481,8 @@ osu %>%
 # How are we defining "inflation?
 
 
-# Distribution of salaries (by bin) of Director titles vs. Manager -------------
+
+
 # * Percentage of titles: Manager, Director, Executive Director, AVP/VP --------
 
 osu %>%
@@ -378,6 +492,7 @@ osu %>%
             Of_Ranks = percent(n()/sum(osu$rank.admin != "None"))) %>%
   arrange(desc(Percent))
 
+
 # * How many VPs and Deans (senior leaders) have been there over 5 years? ------
 
 osu %>%
@@ -386,6 +501,7 @@ osu %>%
   summarize(Number = n(), Over_5 = sum(tenure.yrs >= 5), 
              Percent = Over_5/n()) %>%
   arrange(desc(Percent))
+
 
 # * Where has the most hiring occured in the last 2 years (by unit and job)? -----
 
@@ -402,6 +518,7 @@ osu %>%
             newbieCount = sum(tenure.yrs <= 1), totalCount = n()) %>%
   arrange(desc(Newbies))
 
+
 # * What is the ratio of professors to instructors in all colleges? ------------
 
 osu %>%
@@ -414,17 +531,29 @@ osu %>%
             Ratio = paste0(round(Professors/nonProfs, 2)," : ","1")) %>%
   arrange(desc(Ratio))
 
+
 # * What colleges have the highest salaries for professors? * ------------------
 
-# All admin ranks
-osu %>% 
+# Arrange the x axis
+profAxis <- c("Professor", "AssocProfessor", "AssistProfessor",
+              "Instructor", "Researcher")
+
+# Median Salary for Academics by College
+acadSalary <- osu %>% 
+  filter(rank.acad != "None", str_detect(job.category, "College")) %>%
+  group_by(rank.acad) %>%
+  summarize(Median = median(pay.annualized)) %>%
+  arrange(desc(Median))
+
+# Median Salary for Academics by College
+byCollege <- osu %>% 
   filter(rank.acad != "None", str_detect(job.category, "College")) %>%
   group_by(job.category) %>%
   summarize(Median = median(pay.annualized)) %>%
   arrange(desc(Median))
 
-# By Rank
-academicPayChart <- osu %>% 
+# Median Salary for Academics by College and Position
+collegeSalary <- osu %>% 
   filter(rank.acad != "None", str_detect(job.category, "College")) %>%
   group_by(job.category) %>%
   summarize(Professor = median(pay.annualized[rank.acad == "Professor"]),
@@ -435,11 +564,11 @@ academicPayChart <- osu %>%
             Researcher = median(
               pay.annualized[rank.acad == "Researcher"], na.rm = TRUE),
             Instructor = median(
-              pay.annualized[rank.acad %in% c("Instructor", "Lecturer")])) %>%
+              pay.annualized[rank.acad == "Instructor"])) %>%
   arrange(desc(Professor))
 
-# Bump Chart Table
-bumpTable <- osu %>% 
+# Median Salary for Academics by College and Position in Rank Order
+rankedSalary <- osu %>% 
   filter(rank.acad != "None", str_detect(job.category, "College")) %>%
   group_by(job.category) %>%
   summarize(Professor = median(
@@ -451,7 +580,7 @@ bumpTable <- osu %>%
             Researcher = median(
               pay.annualized[rank.acad == "Researcher"], na.rm = TRUE),
             Instructor = median(
-              pay.annualized[rank.acad %in% c("Instructor", "Lecturer")])) %>%
+              pay.annualized[rank.acad == "Instructor"])) %>%
   arrange(desc(Professor)) %>%
   mutate(Professor = rank(-Professor),
          AssocProfessor = rank(-AssocProfessor),
@@ -459,28 +588,68 @@ bumpTable <- osu %>%
          Researcher = rank(-Researcher),
          Instructor = rank(-Instructor))
 
-# Bump Chart
-ggplot(bumpTable, aes(x = c(Professor, AssocProfessor, 
-              AssistProfessor, Researcher, Instructor), group = job.category)) +
-  geom_line(aes(color = job.category)) +
-  geom_point(aes(color = job.category))
+# Salary Bump Chart
+collegeSalary2 <- pivot_longer(collegeSalary, cols = Professor:Instructor)
 
-# Network diagram - What orgs hire from what orgs ------------------------------
-# Network diagram - Relationship between Extension Service and College ---------
-# Range of compensation and tenure for exec/admin assistants -------------------
-# Overlap in compensation rates staff/faculty ----------------------------------
-# Are IT positions across staff/faculty compensated equally? -------------------
-# Do pay rates for staff in same title correlate with tenure? ------------------
+ggplot(collegeSalary2, aes(x = name, y = value, group = job.category)) +
+  geom_line(aes(color = job.category)) +
+  scale_x_discrete(limits = profAxis) +
+  theme_classic()
+
+# Salary Bump Chart
+collegeSalary2 <- pivot_longer(collegeSalary, cols = Professor:Instructor)
+
+ggplot(collegeSalary2, aes(x = name, y = value, group = job.category)) +
+  geom_line(aes(color = job.category)) +
+  scale_x_discrete(limits = profAxis) +
+  theme_classic()
+
+# Rank Order Bump Chart (Needs a ton of work)
+rankedSalary2 <- pivot_longer(rankedSalary, cols = Professor:Instructor)
+
+ggplot(rankedSalary2, aes(x = name, y = value, group = job.category)) +
+  geom_line(aes(color = job.category)) +
+  scale_x_discrete(limits = profAxis) +
+  scale_y_reverse() +
+  theme_classic()
+
+
+
+
+# * Range of compensation and tenure for exec/admin assistants -------------------
+
+## Compensation
+osu %>%
+  filter(exec.cat == "Support") %>%
+  group_by(rank.admin) %>%
+  summarize(pay = pay.annualized) %>%
+  ggplot(aes(rank.admin, pay)) +
+    geom_boxplot() +
+    scale_y_continuous(labels = comma)
+
+## Tenure
+osu %>%
+  filter(exec.cat == "Support") %>%
+  group_by(rank.admin) %>%
+  summarize(Tenure = tenure.yrs) %>%
+  ggplot(aes(rank.admin, Tenure)) +
+    geom_boxplot() 
+  
+
+osu %>% count(rank.admin == "Executive Assistant")
+
 # * Most common staff titles? --------------------------------------------------
 
 osu %>%
   filter(type.employee == "Staff") %>%
   count(job.title, sort = TRUE)
 
+
 # Headcount visual per school by job bracket and employee class ----------------
-# Is grad student info anywhere in this data set? ------------------------------
-# Can I break out tenure/tenure track? -----------------------------------------
-# Add title of person's supervisor to some degree, maybe just school prez ------
+# Distribution of salaries (by bin) of Director titles vs. Manager -------------
+# More granular salary and tenure bins -----------------------------------------
+# Network diagram - What orgs hire from what orgs ------------------------------
+# Network diagram - Relationship between Extension Service and College ---------
 # End Section 4 ----
 
 #*******************************************************************************
@@ -492,6 +661,8 @@ osu$name.full[duplicated(osu$name.full)]
 
 #doesn't work because of multiple jobs. Come back later'
 
+# Can I break out tenure/tenure track? -----------------------------------------
+# Add title of person's supervisor to some degree, maybe just school prez ------
 # Salary model -------- Needs Update -------------------------------------------
 
 # Original model
