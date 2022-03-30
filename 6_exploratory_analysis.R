@@ -134,10 +134,18 @@ osu_wth_appt <- osu_wth_appt %>%
     rank.acad == "Lecturer" ~ "Instructor",
     TRUE ~ as.character(rank.acad)))
 
+# Fix part-time monthly annualized pay -----------------------------------------
+
+osu_wth_appt <- osu_wth_appt %>%
+  mutate(pay.annualized = case_when(full.time == FALSE & !is.na(pay.monthly) 
+      ~ as.numeric(12* (pay.monthly / (percent.time/100))),
+    TRUE ~ as.numeric(pay.annualized)
+  ))
+
 # Split and save data frames again ---------------------------------------------
 # Save data frames separately so I can analyze without appointees or fellows
 osu <- osu_wth_appt %>%
-  filter(appointee == FALSE, pay.actual != 0)
+  filter(appointee == FALSE, pay.actual != 0, job.title != "Graduate Fellow")
 
 save(osu, file = "osu_df.RData")
 save(osu_wth_appt, file = "osu_wth_appt_df.RData")
@@ -287,8 +295,7 @@ report_head(sort = average_tenure)
 
 
 # * Gender Splits --------------------------------------------------------------
-#   Examine differences in gender. Try to find out why Unknown genders (unusual 
-#   first names) get paid more 
+#   Examine differences in gender.
 
 # Annualized Salary by Gender and Type
 osu %>%
@@ -315,6 +322,21 @@ osu %>%
 
 
 # Tenure v Salary --------------------------------------------------------------
+
+# Messing around. See Script 7.
+osu %>%
+  filter(pay.annualized < 500000) %>%
+  ggplot(aes(tenure.yrs, pay.annualized)) +
+  geom_point(position = "jitter") + 
+  scale_y_continuous(labels = comma)
+
+osu %>%
+  filter(pay.annualized < 500000) %>%
+  ggplot(aes(tenure.yrs, pay.annualized, color = type.employee)) +
+  geom_point(position = "jitter", alpha = .05) + 
+  scale_y_sqrt(labels = comma, n.breaks = 10) + 
+  scale_x_binned(n.breaks = 20) +
+  theme_classic()
 
 # Salary of professor v other instructor by employment length ------------------
 
@@ -349,7 +371,7 @@ tenure_spread <- osu %>%
   arrange(desc(Tenured))
 
 ggplot(tenure_spread, aes(x= reorder(job.category, -Tenured), Tenured)) + 
-  geom_col(fill = beav.Orange) + 
+  geom_col(fill = beaver.Orange) + 
   scale_x_discrete(NULL, labels = colleges) +
   scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
   theme_minimal() + 
@@ -375,19 +397,18 @@ rm(tenure_spread2, med_pay)
 
 #Try 1
 ggplot(layered_try, aes(x= reorder(job.category, -Tenured), Tenured)) + 
-  geom_col(fill = beav.Orange) + 
+  geom_col(fill = beaver.Orange) + 
   geom_point(aes(size = Salary)) +
-  scale_x_discrete(NULL, labels = labs.Colleges) +
+  scale_x_discrete(NULL, labels = colleges) +
   scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
   theme_minimal() + 
   labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
 
 ggplot(layered_try, aes(x= reorder(job.category, -Tenured), Tenured)) + 
-  #geom_col(fill = beav.Orange) + 
   geom_segment(aes(x=job.category, xend=job.category, y=0, yend=Tenured)) +
-  geom_point(aes(color = beav.Orange, size = Salary)) +
+  geom_point(aes(color = beaver.Orange, size = Salary)) +
   scale_size_area(max_size = 30) +
-  scale_x_discrete(NULL, labels = labs.Colleges) +
+  scale_x_discrete(NULL, labels = colleges) +
   scale_y_continuous(NULL, labels = percent_format(accuracy = 1)) +
   theme_minimal() + 
   labs(title = "Percent of Faculty Tenured", subtitle =  "by College")
@@ -396,8 +417,6 @@ ggplot(layered_try, aes(x= reorder(job.category, -Tenured), Tenured)) +
 
 # * Pay rates for different types of faculty * ---------------------------------
 
-distinct(osu$rank.admin)
-
 #Admin
 osu %>%
   filter(rank.admin != "None") %>%
@@ -405,7 +424,7 @@ osu %>%
   summarize(Pay = median(pay.annualized)) %>%
   arrange(desc(Pay)) %>%
   ggplot(aes(x= reorder(rank.admin, -Pay), Pay)) + 
-    geom_col(fill = beav.Black) +
+    geom_col(fill = paddletail.Black) +
     theme(axis.text.x = element_text(angle = 90)) +
     theme_minimal() +
     labs(title = "Median Annualized Salart", subtitle =  "by Administrative Rank")
@@ -417,7 +436,7 @@ osu %>%
   summarize(Pay = median(pay.annualized)) %>%
   arrange(desc(Pay)) %>%
   ggplot(aes(x= reorder(rank.acad, -Pay), Pay)) + 
-    geom_col(fill = beav.Orange) +
+    geom_col(fill = beaver.Orange) +
     theme(axis.text.x = element_text(angle = 90)) +
     theme_minimal()
 

@@ -1,0 +1,144 @@
+---
+title: #"OSU Salary Analysis"
+author: "Scott Hasenpflug"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    css: "osu_style.css"
+    toc: true
+    toc_float: true
+    df_print: "kable"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library calls, include=FALSE}
+library(tidyverse)
+library(pdftools)
+library(rebus)
+library(lubridate)
+library(tidytext)
+library(skimr)
+library(scales)
+library(knitr)
+library(stringr)
+library(tibble)
+library(gender)
+library(formattable)
+library(swatches)
+library(treemap)
+library(ggridges)
+library(gghighlight)
+```
+
+```{r source data frame, include=FALSE}
+load("osu_df.RData")
+```
+
+```{r saved values, include=FALSE}
+Palette <- read_ase("OSU_rgb_2018.ase", use_names = TRUE, .verbose = FALSE)
+
+beaver.Orange <- "#D73F09"
+paddletail.Black <- "#000000"
+pane.Stand <-  "#4A773C"
+high.Tide <- "#00859B"
+luminance <- "#FFB500#"
+stratosphere <- "#006A8E"
+reindeer.Moss <- "#C4D6A4"
+seafoam <- "#B8DDE1"
+candela <- "#FDD26E"
+moondust <- "#C6DAE7"
+hop.Bine <- "#AA9D2E"
+rogue.Wave <- "#0D5257"
+solar.Flare <- "#D3832B"
+star.Canvas <- "#003B5C"
+till <- "#B7A99A"
+coastline <- "#A7ACA2"
+high.Desert <- "#7A6855"
+crater <- "#8E9089"
+
+colleges <- {c("College of Agriculture" = "Agriculture",
+                   "College of Business" = "Business",
+                   "College of Earth, Ocean, and Atmospheric Sciences" = "EO&A",
+                   "College of Education" = "Education",
+                   "College of Engineering" = "Engineering",
+                   "College of Forestry" = "Forestry",
+                   "College of Liberal Arts" = "LibArts",
+                   "College of Pharmacy" = "Pharmacy",
+                   "College of Public Health and Human Services" = "Health",
+                   "College of Science" = "Science",
+                   "College of Veterinary Medicine" = "Veterinary")}
+```
+
+```{r custom functions, include=FALSE}
+report_head <- function(group1 = type.employee, group2 = full.time, group3 = NULL, 
+                        group4 = NULL, sort = Headcount) {
+  osu %>%
+    group_by({{group1}}, {{group2}}, {{group3}}, {{group4}}) %>%
+    summarize(Headcount = length(unique(name.full)),
+              FTE = sum(percent.time)/100,
+              Anualized = accounting(median(pay.annualized)),
+              Actual = accounting(median(pay.actual)),
+              Tenure = median(tenure.yrs)) %>%
+    arrange(desc({{sort}})) %>% 
+    rename(Type = type.employee, `Full Time` = full.time)
+}
+
+report_spend <- function(group = home.category, sort = Cost) {
+  budget <- sum(osu$pay.actual)
+  osu %>%
+    group_by({{group}}) %>%
+    summarise(Cost = accounting(sum(pay.actual),0), 
+              Share = percent(sum(pay.actual)/sum(budget)),
+              `per FTE` = accounting(sum(pay.actual)/(sum(percent.time)/100),0),
+              `per Headcount` = accounting(sum(
+                pay.actual)/length(unique(name.full)),0)) %>%
+    relocate({{sort}}, .after = {{group}}) %>%
+    arrange(desc({{sort}})) %>% 
+    rename(Division = home.category)
+}
+```
+
+[Link to GitHub Repository](https://github.com/scott-hasenpflug/OSU_Project)
+
+<p align="center">![](osu_primary_logo.jpg){width=50%}</p>
+
+## **Salary Report**
+
+#### January 2022 {style="color: #000000"}
+
+Words Words Words WordsWords Words Words WordsWords Words Words WordsWords Words
+  Words Words Words WordsWords Words Words WordsWords Words Words Words
+
+### Headcount
+```{r headcount, echo=FALSE, message=FALSE}
+report_head(type.employee, full.time) %>%
+  select(-`Full Time`)
+```
+
+### Labor Cost
+```{r spending, echo=FALSE, message=FALSE}
+report_spend()
+```
+
+```{r treemap, echo=FALSE, message=FALSE, fig.align='center'}
+treemap_data <- osu %>%
+  filter(str_detect(osu$job.category, "College")) %>%
+  group_by(job.category, gender) %>%
+  summarize(Salary = sum(pay.actual))
+
+treemap(treemap_data,
+        index = "job.category",
+        vSize = "Salary",
+        type = "index",
+        palette = Palette,
+        fontsize.labels = 15,
+        fontface.labels = 2, 
+        align.labels = c("center", "top"), 
+        inflate.labels = FALSE, 
+        title = "Labor Cost per College"
+)
+```
+
