@@ -1,0 +1,38 @@
+---
+title: "Practice 01APR"
+author: "Scott Hasenpflug"
+date: "4/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+load("osu_df.RData")
+beaver.Orange <- "#D73F09"
+```
+
+```{r cars, include=FALSE}
+skimr::skim(osu)
+```
+
+### Most common jobs
+
+What are the most common job titles? (There are 1,728 unique job titles at OSU.
+We'll look at the top 12).
+
+```{r , echo=FALSE}
+osu %>% 
+  count(job.title, sort = TRUE) %>% 
+  head(12) %>% 
+  mutate(job.title = fct_reorder(job.title, n)) %>% 
+  ggplot(aes(job.title, n, fill = beaver.Orange)) +
+  geom_col() + 
+  coord_flip() +
+  labs(x = "",
+       y = "Total # of Employees") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
