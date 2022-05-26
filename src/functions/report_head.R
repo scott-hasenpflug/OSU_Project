@@ -7,6 +7,10 @@ report_head <- function(group1 = type.employee, group2 = full.time, group3 = NUL
               Anualized = accounting(median(pay.annualized)),
               Actual = accounting(median(pay.actual)),
               Tenure = median(tenure.yrs)) %>%
+    mutate(full.time = case_when(
+      full.time == "TRUE" ~ "Full-time",
+      full.time == "FALSE" ~ "Part-time"
+    )) %>%
     arrange(desc({{sort}})) %>% 
-    rename(Type = type.employee, `Full Time` = full.time)
+    rename(Type = type.employee, `Status` = full.time)
 }

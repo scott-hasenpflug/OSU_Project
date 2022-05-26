@@ -16,6 +16,10 @@ library(swatches)
 library(treemap)
 library(ggridges)
 library(gghighlight)
+library(ggrepel)
+library(DT)
+library(plotly)
+library(bookdown)
 
 # Custom Values -----------------------------------------------------------
 
@@ -56,4 +60,8 @@ colleges <- {c("College of Agriculture" = "Agriculture",
                "College of Science" = "Science",
                "College of Veterinary Medicine" = "Veterinary")}
 
+# Theme  ------------------------------------------------------------------
 
+standard <- theme_set(theme_classic())
+theme_set(standard)
+#theme_update()
